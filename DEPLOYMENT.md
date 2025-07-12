@@ -22,6 +22,8 @@ The frontend is configured to connect to the backend at:
    # Deploy
    vercel
    ```
+   
+   **Note**: The project uses pnpm for package management. Vercel will automatically use `npx pnpm install` and `npx pnpm run build` as configured in `vercel.json`.
 
 3. **Environment Variables** (if needed):
    - Add any environment variables in the Vercel dashboard

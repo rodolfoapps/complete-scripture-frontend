@@ -1,9 +1,9 @@
 {
   "version": 2,
   "name": "search-diligently-frontend",
-  "buildCommand": "pnpm run build",
+  "buildCommand": "npx pnpm run build",
   "outputDirectory": "dist",
-  "installCommand": "pnpm install",
+  "installCommand": "npx pnpm install",
   "framework": "vite",
   "routes": [
     {

@@ -8,6 +8,8 @@ The frontend is configured to connect to the backend at:
 - **Production**: `https://scripture-search-backend.vercel.app/api/scripture`
 - **Development**: `/api/scripture` (for local development with backend)
 
+**Important**: Make sure to update the backend URL in `src/config.js` if your backend is deployed at a different URL.
+
 ## Deployment Steps
 
 1. **Update Backend URL** (if needed):
@@ -23,7 +25,7 @@ The frontend is configured to connect to the backend at:
    vercel
    ```
    
-   **Note**: The project uses pnpm for package management. Vercel will automatically use `npx pnpm install` and `npx pnpm run build` as configured in `vercel.json`.
+   **Note**: The project uses npm for package management on Vercel. Vercel will automatically use `npm install --legacy-peer-deps` and `npm run build` as configured in `vercel.json`.
 
 3. **Environment Variables** (if needed):
    - Add any environment variables in the Vercel dashboard

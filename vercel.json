@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "name": "search-diligently-frontend",
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "dist",
+  "installCommand": "pnpm install",
+  "framework": "vite",
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}
+

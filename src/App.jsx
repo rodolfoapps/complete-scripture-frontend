@@ -1,291 +1,347 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
+import { Search, Book, Menu, X, ArrowLeft } from 'lucide-react'
+import { Button } from '@/components/ui/button.jsx'
+import { Input } from '@/components/ui/input.jsx'
+import { Card, CardContent } from '@/components/ui/card.jsx'
+import AdvancedSearch from './components/AdvancedSearch.jsx'
+import { API_BASE_URL } from './config.js'
+import './App.css'
 
-// Production API URL for Render backend
-const API_BASE_URL = 'https://scripture-search-backend.onrender.com/api'
-
-function App( ) {
+function App() {
+  const [navigationData, setNavigationData] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [advancedSearchQuery, setAdvancedSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const [selectedCollections, setSelectedCollections] = useState([])
-  const [selectedBooks, setSelectedBooks] = useState([])
-  const [showCollections, setShowCollections] = useState(false)
-  const [showBooks, setShowBooks] = useState(false)
+  const [currentChapter, setCurrentChapter] = useState(null)
+  const [highlightVerse, setHighlightVerse] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [currentView, setCurrentView] = useState('welcome') // 'welcome', 'chapter', 'search'
+  const [lastSearchParams, setLastSearchParams] = useState(null)
+  const [navigationHistory, setNavigationHistory] = useState(null)
 
-  // Scripture collections and books
-  const scriptureCollections = [
-    'Old Testament',
-    'New Testament', 
-    'Book of Mormon',
-    'Doctrine and Covenants',
-    'Pearl of Great Price'
-  ]
-
-  const scriptureBooks = {
-    'Old Testament': [
-      'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
-      '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra', 'Nehemiah',
-      'Esther', 'Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon', 'Isaiah', 'Jeremiah',
-      'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel', 'Amos', 'Obadiah', 'Jonah', 'Micah',
-      'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi'
-    ],
-    'New Testament': [
-      'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians', '2 Corinthians',
-      'Galatians', 'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians',
-      '1 Timothy', '2 Timothy', 'Titus', 'Philemon', 'Hebrews', 'James', '1 Peter', '2 Peter',
-      '1 John', '2 John', '3 John', 'Jude', 'Revelation'
-    ],
-    'Book of Mormon': [
-      '1 Nephi', '2 Nephi', 'Jacob', 'Enos', 'Jarom', 'Omni', 'Words of Mormon', 'Mosiah',
-      'Alma', 'Helaman', '3 Nephi', '4 Nephi', 'Mormon', 'Ether', 'Moroni'
-    ],
-    'Doctrine and Covenants': ['Doctrine and Covenants'],
-    'Pearl of Great Price': [
-      'Moses', 'Abraham', 'Joseph Smith—Matthew', 'Joseph Smith—History', 'Articles of Faith'
-    ]
-  }
-
-  // Check API connection on component mount
+  // Load navigation data on component mount
   useEffect(() => {
-    checkConnection()
+    fetchNavigationData()
   }, [])
 
-  const checkConnection = async () => {
+  const fetchNavigationData = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/health`)
-      if (response.ok) {
-        setIsConnected(true)
+      const response = await fetch(`${API_BASE_URL}/navigation`)
+      const data = await response.json()
+      if (data.success) {
+        setNavigationData(data.data)
       }
     } catch (error) {
-      console.error('Connection check failed:', error)
-      setIsConnected(false)
+      console.error('Error fetching navigation data:', error)
     }
   }
 
-  const handleSearch = async () => {
+  const handleQuickSearch = async () => {
     if (!searchQuery.trim()) return
 
-    setIsLoading(true)
-    try {
-      const response = await fetch(`${API_BASE_URL}/search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: searchQuery,
-          collections: selectedCollections,
-          books: selectedBooks,
-          limit: 1000
-        }),
-      })
+    // Transfer search terms to advanced search box
+    setAdvancedSearchQuery(searchQuery)
 
-      if (response.ok) {
-        const data = await response.json()
-        setSearchResults(data.results || [])
+    const searchParams = {
+      query: searchQuery,
+      verse_range: 1,
+      books: []
+    }
+
+    await performSearch(searchParams)
+  }
+
+  const performSearch = async (searchParams) => {
+    setLoading(true)
+    setLastSearchParams(searchParams)
+    
+    try {
+      const queryString = new URLSearchParams({
+        query: searchParams.query,
+        verse_range: searchParams.verse_range,
+        books: searchParams.books.join(',')
+      }).toString()
+
+      const response = await fetch(`${API_BASE_URL}/search?${queryString}`)
+      const data = await response.json()
+      
+      if (data.success) {
+        setSearchResults(data.results)
+        setCurrentView('search')
       } else {
-        console.error('Search failed:', response.statusText)
-        setSearchResults([])
+        console.error('Search failed:', data.error)
       }
     } catch (error) {
-      console.error('Search error:', error)
-      setSearchResults([])
+      console.error('Error performing search:', error)
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch()
+  const loadChapter = async (bookTitle, chapterNumber, verseNumber = null) => {
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/chapter?book=${encodeURIComponent(bookTitle)}&chapter=${chapterNumber}`)
+      const data = await response.json()
+      
+      if (data.success) {
+        setCurrentChapter(data.chapter)
+        setHighlightVerse(verseNumber)
+        setCurrentView('chapter')
+      } else {
+        console.error('Failed to load chapter:', data.error)
+      }
+    } catch (error) {
+      console.error('Error loading chapter:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const toggleCollection = (collection) => {
-    setSelectedCollections(prev => 
-      prev.includes(collection) 
-        ? prev.filter(c => c !== collection)
-        : [...prev, collection]
-    )
-  }
-
-  const toggleBook = (book) => {
-    setSelectedBooks(prev => 
-      prev.includes(book) 
-        ? prev.filter(b => b !== book)
-        : [...prev, book]
-    )
-  }
-
-  const clearFilters = () => {
-    setSelectedCollections([])
-    setSelectedBooks([])
-  }
-
-  const highlightText = (text, query) => {
-    if (!query) return text
+  const navigateToVerse = (verse) => {
+    // Store navigation history for back button
+    if (currentView === 'search') {
+      setNavigationHistory({
+        view: 'search',
+        searchResults: searchResults,
+        searchParams: lastSearchParams,
+        searchQuery: advancedSearchQuery
+      })
+    }
     
-    const words = query.toLowerCase().split(' ').filter(word => word.length > 0)
-    let highlightedText = text
-    
-    words.forEach(word => {
-      const regex = new RegExp(`(${word})`, 'gi')
-      highlightedText = highlightedText.replace(regex, '<mark style="background-color: yellow; font-weight: bold;">$1</mark>')
-    })
-    
-    return highlightedText
+    loadChapter(verse.book_title, verse.chapter_number, verse.verse_number)
   }
 
-  return (
-    <div className="app">
-      <div className="container">
-        {/* Sidebar */}
-        <div className="sidebar">
-          <div className="logo-section">
-            <h1 className="logo">Search Diligently</h1>
-            <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-              <span className="status-dot"></span>
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </div>
-          </div>
+  const goBackToSearch = () => {
+    if (navigationHistory) {
+      setSearchResults(navigationHistory.searchResults)
+      setLastSearchParams(navigationHistory.searchParams)
+      setAdvancedSearchQuery(navigationHistory.searchQuery)
+      setCurrentView('search')
+      setNavigationHistory(null)
+    }
+  }
 
-          {/* Active Filters */}
-          {(selectedCollections.length > 0 || selectedBooks.length > 0) && (
-            <div className="filter-section">
-              <div className="filter-header">
-                <h3>Active Filters</h3>
-                <button onClick={clearFilters} className="clear-filters">Clear All</button>
-              </div>
-              <div className="active-filters">
-                {selectedCollections.map(collection => (
-                  <span key={collection} className="filter-badge collection">
-                    {collection}
-                    <button onClick={() => toggleCollection(collection)}>×</button>
-                  </span>
-                ))}
-                {selectedBooks.map(book => (
-                  <span key={book} className="filter-badge book">
-                    {book}
-                    <button onClick={() => toggleBook(book)}>×</button>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Scripture Collections */}
-          <div className="filter-section">
-            <button 
-              className="filter-toggle"
-              onClick={() => setShowCollections(!showCollections)}
-            >
-              <span>Scripture Collections</span>
-              <span className={`arrow ${showCollections ? 'expanded' : ''}`}>▼</span>
-            </button>
-            {showCollections && (
-              <div className="filter-options">
-                {scriptureCollections.map(collection => (
-                  <label key={collection} className="filter-option">
-                    <input
-                      type="checkbox"
-                      checked={selectedCollections.includes(collection)}
-                      onChange={() => toggleCollection(collection)}
-                    />
-                    <span>{collection}</span>
-                  </label>
-                ))}
-              </div>
-            )}
+  const renderWelcome = () => (
+    <div className="flex-1 flex items-center justify-center">
+      <div className="text-center max-w-2xl mx-auto px-4">
+        <Book className="w-16 h-16 mx-auto mb-6 text-blue-600" />
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">Search Diligently</h1>
+        <p className="text-xl text-gray-600 mb-8">
+          Advanced Scripture Search Tool - Explore the LDS Canon with powerful search capabilities
+        </p>
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+          <div className="flex gap-2 mb-4">
+            <Input
+              type="text"
+              placeholder="Quick search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleQuickSearch()}
+              className="flex-1"
+            />
+            <Button onClick={handleQuickSearch} disabled={loading}>
+              <Search className="w-4 h-4" />
+            </Button>
           </div>
+          <AdvancedSearch 
+            onSearch={performSearch}
+            searchQuery={advancedSearchQuery}
+            setSearchQuery={setAdvancedSearchQuery}
+          />
+        </div>
+      </div>
+    </div>
+  )
 
-          {/* Individual Books */}
-          <div className="filter-section">
-            <button 
-              className="filter-toggle"
-              onClick={() => setShowBooks(!showBooks)}
-            >
-              <span>Individual Books</span>
-              <span className={`arrow ${showBooks ? 'expanded' : ''}`}>▼</span>
-            </button>
-            {showBooks && (
-              <div className="filter-options">
-                {Object.entries(scriptureBooks).map(([collection, books]) => (
-                  <div key={collection} className="book-collection">
-                    <div className="collection-name">{collection}</div>
-                    {books.map(book => (
-                      <label key={book} className="filter-option book-option">
-                        <input
-                          type="checkbox"
-                          checked={selectedBooks.includes(book)}
-                          onChange={() => toggleBook(book)}
-                        />
-                        <span>{book}</span>
-                      </label>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
+  const renderSearchResults = () => (
+    <div className="flex-1 p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <div className="flex gap-2 mb-4">
+            <Input
+              type="text"
+              placeholder="Quick search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleQuickSearch()}
+              className="flex-1"
+            />
+            <Button onClick={handleQuickSearch} disabled={loading}>
+              <Search className="w-4 h-4" />
+            </Button>
           </div>
+          <AdvancedSearch 
+            onSearch={performSearch}
+            searchQuery={advancedSearchQuery}
+            setSearchQuery={setAdvancedSearchQuery}
+          />
         </div>
 
-        {/* Main Content */}
-        <div className="main-content">
-          <div className="search-section">
-            <div className="search-container">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Search scriptures..."
-                className="search-input"
-              />
-              <button 
-                onClick={handleSearch} 
-                disabled={isLoading || !searchQuery.trim()}
-                className="search-button"
-              >
-                {isLoading ? 'Searching...' : 'Search'}
-              </button>
-            </div>
-          </div>
+        <div className="mb-4">
+          <h2 className="text-2xl font-bold text-gray-900">
+            Search Results ({searchResults.length})
+          </h2>
+        </div>
 
-          <div className="results-section">
-            {searchResults.length > 0 && (
-              <div className="results-header">
-                <h2>Search Results ({searchResults.length})</h2>
-              </div>
-            )}
-            
-            <div className="results-container">
-              {searchResults.length === 0 && searchQuery && !isLoading && (
-                <div className="no-results">
-                  <p>No results found for "{searchQuery}". Try different keywords or adjust your filters.</p>
+        <div className="space-y-4">
+          {searchResults.map((result, index) => (
+            <Card key={index} className="cursor-pointer hover:shadow-lg transition-shadow">
+              <CardContent className="p-4" onClick={() => navigateToVerse(result)}>
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-semibold text-blue-600">
+                    {result.book_title} {result.chapter_number}:{result.verse_number}
+                  </h3>
                 </div>
-              )}
-              
-              {searchResults.map((result, index) => (
-                <div key={index} className="result-card">
-                  <div className="result-reference">
-                    <strong>{result.book} {result.chapter}:{result.verse}</strong>
-                    <span className="collection-badge">{result.collection}</span>
-                  </div>
-                  <div 
-                    className="result-text"
-                    dangerouslySetInnerHTML={{ 
-                      __html: highlightText(result.text, searchQuery) 
-                    }}
-                  />
+                <p 
+                  className="text-gray-700 leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: result.highlighted_text }}
+                />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderChapter = () => (
+    <div className="flex-1 p-6">
+      <div className="max-w-4xl mx-auto">
+        {navigationHistory && (
+          <div className="mb-4">
+            <Button 
+              onClick={goBackToSearch}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Search Results
+            </Button>
+          </div>
+        )}
+        
+        {currentChapter && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h1 className="text-3xl font-bold text-gray-900 mb-6">
+              {currentChapter.book_title} Chapter {currentChapter.chapter_number}
+            </h1>
+            <div className="space-y-4">
+              {currentChapter.verses.map((verse) => (
+                <div 
+                  key={verse.verse_number}
+                  className={`p-3 rounded ${
+                    highlightVerse === verse.verse_number 
+                      ? 'bg-yellow-100 border-l-4 border-yellow-500' 
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="font-semibold text-blue-600 mr-2">
+                    {verse.verse_number}
+                  </span>
+                  <span className="text-gray-800">{verse.text}</span>
                 </div>
               ))}
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  )
+
+  const renderSidebar = () => (
+    <div className={`bg-white border-r border-gray-200 transition-all duration-300 ${
+      sidebarOpen ? 'w-80' : 'w-0'
+    } overflow-hidden`}>
+      <div className="p-4">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Scriptures</h2>
+        <div className="space-y-2">
+          {navigationData.map((volume) => (
+            <div key={volume.volume_title} className="mb-4">
+              <h3 className="font-medium text-gray-800 mb-2">{volume.volume_title}</h3>
+              <div className="space-y-1 ml-2">
+                {volume.books.map((book) => (
+                  <div key={book.book_title} className="mb-2">
+                    <h4 className="text-sm font-medium text-gray-700 mb-1">{book.book_title}</h4>
+                    <div className="flex flex-wrap gap-1 ml-2">
+                      {Array.from({ length: book.chapter_count }, (_, i) => i + 1).map((chapter) => (
+                        <button
+                          key={chapter}
+                          onClick={() => loadChapter(book.book_title, chapter)}
+                          className="px-2 py-1 text-xs bg-gray-100 hover:bg-blue-100 rounded transition-colors"
+                        >
+                          {chapter}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
+    </div>
+  )
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Isaiah Class Banner */}
+      <div className="bg-black text-white text-center py-2">
+        <a 
+          href="https://searchdiligently.com/isaiah-class/" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-white hover:text-gray-300 transition-colors"
+        >
+          Join Our Free Isaiah Class
+        </a>
+      </div>
+
+      <div className="flex h-screen">
+        {renderSidebar()}
+        
+        <div className="flex-1 flex flex-col">
+          <header className="bg-white border-b border-gray-200 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                >
+                  {sidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+                </Button>
+                <h1 className="text-xl font-semibold text-gray-900">Search Diligently</h1>
+              </div>
+            </div>
+          </header>
+
+          {currentView === 'welcome' && renderWelcome()}
+          {currentView === 'search' && renderSearchResults()}
+          {currentView === 'chapter' && renderChapter()}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-gray-200 py-4 text-center">
+        <p className="text-sm text-gray-600">
+          © 2025{' '}
+          <a 
+            href="https://searchdiligently.com" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 transition-colors"
+          >
+            SearchDiligently.com
+          </a>
+          {' '}version 1
+        </p>
+      </footer>
     </div>
   )
 }
 
 export default App
+
